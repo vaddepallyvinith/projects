@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus PDF Bot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+
+    <div class="app-container">
+        <header>
+            <h1>Neural PDF Reader</h1>
+            <div class="upload-area">
+                <label class="custom-file-upload">
+                    <input type="file" id="pdf-file" accept="application/pdf">
+                    <br>
+                    <span id="file-name">Select PDF</span>
+                </label>
+                <button id="upload-btn">Initialize Context</button>
+                <br>
+            </div>
+        </header>
+
+        <div class="chat-container" id="chat">
+            <div class="message bot-message">
+                Welcome to the interface. Please select and initialize a PDF to begin analysis.
+            </div>
+            <br>
+            <div class="loading" id="loading-indicator">Processing neural context...</div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Query the document..." autocomplete="off" disabled>
+            <button class="send-btn" id="send-btn" disabled>
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('pdf-file');
+        const fileNameDisplay = document.getElementById('file-name');
+        const uploadBtn = document.getElementById('upload-btn');
+        const chatContainer = document.getElementById('chat');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                fileNameDisplay.textContent = e.target.files[0].name;
+                uploadBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            }
+        });
+
+        uploadBtn.addEventListener('click', async () => {
+            if (!fileInput.files.length) return alert("Select a PDF first!");
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = "Uploading...";
+
+            try {
+                const res = await fetch("/upload", { method: "POST", body: formData });
+                const data = await res.json();
+
+                if (res.ok) {
+                    uploadBtn.textContent = "Initialized!";
+                    uploadBtn.style.background = "linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))";
+                    uploadBtn.style.color = "var(--text-muted)";
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+
+                    addMessage("Context initialized successfully. What would you like to know?", false);
+                } else {
+                    alert(data.error);
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = "Initialize Context";
+                }
+            } catch (err) {
+                alert("Error uploading file.");
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = "Initialize Context";
+            }
+        });
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, true);
+            userInput.value = "";
+
+            loadingIndicator.style.display = "block";
+            chatContainer.appendChild(loadingIndicator); // Move to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            try {
+                const res = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+
+                loadingIndicator.style.display = "none";
+
+                if (res.ok) {
+                    // simple render for markdown bold/newlines
+                    let formatted = data.response.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                    formatted = formatted.replace(/\n/g, '<br>');
+                    addMessage(formatted, false, true);
+                } else {
+                    addMessage("Error: " + data.error, false);
+                }
+            } catch (err) {
+                loadingIndicator.style.display = "none";
+                addMessage("Network Error while sending message.", false);
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function addMessage(text, isUser, isHtml = false) {
+            const div = document.createElement('div');
+            div.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            if (isHtml) {
+                div.innerHTML = text;
+            } else {
+                div.textContent = text;
+            }
+            chatContainer.insertBefore(div, loadingIndicator);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
